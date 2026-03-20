@@ -61,7 +61,8 @@ FNR == 1 {
     sub(/[ \t]+$/, "", msg)
     gsub(/"/, "\\\"", msg)
 
-    printf "{\"name\":\"%s\",\"status\":%s,\"duration\":\"%s\"}", msg, status, duration
+    printf "{\"name\":\"%s\",\"status\":%s,\"duration\":\"%s\"}",
+    msg, status, duration
 }
 
 /tests passed/ {
