@@ -35,7 +35,7 @@ FNR == 1 {
     name = parts[1]
 
     gsub(/\[|\]/, "", name)
-    gsub(/^[ \t]+|[ \t]+$/, "", name)    
+    gsub(/^[ \t]+|[ \t]+$/, "", name)
 
     printf "\"testName\":\"%s\" ,\"tests\":[", name
 }
@@ -84,8 +84,9 @@ FNR == 1 {
         failed = arr[1]
     }
 
-    if (match($0, /rated as [0-9.]+%/)) {
-        temp = substr($0, RSTART, RLENGTH) 
+    if (match($0, /rated as [0-9]+(\.[0-9]+)?%/))
+    {
+        temp = substr($0, RSTART, RLENGTH)
         split(temp, arr, " ")
         rating = arr[3]
         sub(/%/, "", rating)
