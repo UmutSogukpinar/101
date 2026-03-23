@@ -1,0 +1,10 @@
+vhosts:
+    - server_name: www.domain1.tld
+      document_root: /www/domain1
+      server_admin: www-admin1@foo.example.com
+      directory: /usr/local/httpd/htdocs
+
+    - server_name: www.domain2.tld
+      document_root: /www/domain2
+      server_admin: www-admin2@foo.example.com
+      directory: /usr/local/httpd/htdocs

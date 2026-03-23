@@ -1,0 +1,14 @@
+{% for host in vhosts %}
+<VirtualHost *:80>
+    ServerName {{ host.server_name }}
+    DocumentRoot {{ host.document_root }}
+    ServerAdmin {{ host.server_admin }}
+    <Directory "{{ host.directory }}">
+        AllowOverride All
+        Options Indexes FollowSymLinks
+        Order allow,deny
+        Allow from all
+    </Directory>
+</VirtualHost>
+{% if not loop.last %}{% endif %}
+{% endfor %}
