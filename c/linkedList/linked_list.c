@@ -1,6 +1,14 @@
 #include "linked_list.h"
 #include "stdlib.h"
 
+void del_node(node* deleted)
+{
+    if (!deleted) return ;
+
+    free(deleted->value);
+    free(deleted);
+}
+
 /*
 * add_front
 *
@@ -136,31 +144,80 @@ static node* find_prev_tail(linked_list* l);
 * - The caller becomes responsible for handling the returned node.
 */
 
-node* remove_back(linked_list* l)
+node* remove_back(linked_list* list)
 {
     node* removed = NULL;
     node* new_tail = NULL;
 
-    if (!l || l->size == 0) return (NULL);
+    if (!list || list->size == 0) return (NULL);
 
-    removed = l->tail;
+    removed = list->tail;
 
-    if (l->size == 1)
+    if (list->size == 1)
     {
-        l->head = NULL;
-        l->tail = NULL;
+        list->head = NULL;
+        list->tail = NULL;
     }
     else
     {
-        new_tail = find_prev_tail(l);
+        new_tail = find_prev_tail(list);
         new_tail->next = NULL;
-        l->tail = new_tail;
+        list->tail = new_tail;
     }
     removed->next = NULL;
-    --(l->size);
+    --(list->size);
 
     return (removed);
 }
+
+node* remove_the_node(
+    linked_list *list,
+    void *value,
+    int (*cmp)(void *, void *)
+)
+{
+    if (list == NULL || cmp == NULL || list->head == NULL) return (NULL);
+
+    if (cmp(list->head->value, value) == 0) return (remove_front(list));
+
+    return (find_and_remove_node(list, value, cmp));
+}
+
+//  ======================== Utils ========================
+
+static node* remove_after_node(linked_list *list, node *prev, node *cur)
+{
+    prev->next = cur->next;
+
+    if (list->tail == cur) list->tail = prev;
+
+    cur->next = NULL;
+    list->size--;
+
+    return (cur);
+}
+
+static node* find_and_remove_node(
+    linked_list *list,
+    void *value,
+    int (*cmp)(void *, void *)
+)
+{
+    node* prev = list->head;
+    node* cur = list->head->next;
+
+    while (cur)
+    {
+        if (cmp(cur->value, value) == 0)
+            return (remove_after_node(list, prev, cur));
+
+        prev = cur;
+        cur = cur->next;
+    }
+
+    return (NULL);
+}
+
 
 /*
 * find_prev_tail
@@ -182,14 +239,14 @@ node* remove_back(linked_list* l)
 * - Primarily used by remove_back in a singly linked list,
 *   where the previous node of the tail cannot be accessed directly.
 */
-static node* find_prev_tail(linked_list* l)
+static node* find_prev_tail(linked_list* list)
 {
     node* cur = NULL;
 
-    if (!l || l->size < 2) return (NULL);
+    if (!list || list->size < 2) return (NULL);
 
-    cur = l->head;
-    while (cur->next != l->tail) cur = cur->next;
+    cur = list->head;
+    while (cur->next != list->tail) cur = cur->next;
 
     return (cur);
 }

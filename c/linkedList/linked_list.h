@@ -16,9 +16,17 @@ typedef struct s_linked_list
 
 } linked_list;
 
-void add_front(linked_list* head, node* new_node);
-void add_back(linked_list* head, node* new_node);
+void del_node(node* deleted);
 
-linked_list* remove(linked_list* head);
+void add_back(linked_list* head, node* new_node);
+void add_front(linked_list* head, node* new_node);
+
+node* remove_back(linked_list* head);
+node* remove_front(linked_list* head);
+node* remove_the_node(
+    linked_list *list,
+    void *value,
+    int (*cmp)(void *, void *)
+);
 
 #endif
