@@ -43,6 +43,21 @@ typedef struct s_node_pair
 
 //  ============================ Utils ============================
 
+/*
+ * Compares two string values.
+ *
+ * This function casts the given void pointers to char pointers
+ * and compares them using strcmp.
+ *
+ * @param a  First string to compare.
+ * @param b  Second string to compare.
+ *
+ * @return
+ * - 0 if the strings are equal
+ * - A negative value if the first  string is less than the second
+ * - A positive value if the first string is greater than the second
+ * 
+ */
 static int  cmp_str(void *a, void *b)
 {
     return (strcmp((char *)a, (char *)b));
