@@ -45,6 +45,7 @@ sem_t santa_sem;
 sem_t elf_sem;
 sem_t reindeer_sem;
 sem_t elf_barrier;
+sem_t reindeer_barrier;
 
 // ==================== ENUMS ====================
 
@@ -84,6 +85,11 @@ typedef struct s_santa
 
 // ================== TIME FUNCTIONS ==================
 
+/**
+ * @brief Suspends the current thread for the given number of seconds.
+ *
+ * @param seconds Number of seconds to sleep.
+ */
 void spend_time(int seconds)
 {
     sleep(seconds);
@@ -91,6 +97,15 @@ void spend_time(int seconds)
 
 // ================== SEMAPHORE FUNCTIONS ==================
 
+/**
+ * @brief Opens a semaphore barrier for a fixed number of waiting threads.
+ *
+ * This function posts to the given semaphore `count` times, allowing exactly
+ * `count` blocked threads to continue execution.
+ *
+ * @param barrier Pointer to the semaphore barrier to open.
+ * @param count Number of threads to release.
+ */
 void open_barrier(sem_t *barrier, int count)
 {
     for (int i = 0; i < count; ++i) 
@@ -101,52 +116,56 @@ void open_barrier(sem_t *barrier, int count)
 
 // ================== MUTEX FUNCTIONS ==================
 
-void change_elves_waiting(int change)
+/**
+ * @brief Updates a shared counter in a thread-safe way.
+ *
+ * This function locks the given mutex, applies the requested change to the
+ * shared counter, and unlocks the mutex.
+ *
+ * @param lock Mutex protecting the shared counter.
+ * @param counter Pointer to the shared counter.
+ * @param change Value to add to the counter.
+ */
+static void	change_waiting_count(mutex *lock, int *counter, int change)
 {
-    pthread_mutex_lock(&lock_elves);
-
-    g_elves_waiting += change;
-    
-    pthread_mutex_unlock(&lock_elves);
+	pthread_mutex_lock(lock);
+	*counter += change;
+	pthread_mutex_unlock(lock);
 }
 
-void check_elves_status()
+/**
+ * @brief Wake up Santa if enough actors are waiting, then waits on a barrier.
+ *
+ * @param lock Mutex protecting the shared waiting counter.
+ * @param waiting_count Pointer to the shared waiting counter.
+ * @param required_count Required number of waiting actors.
+ * @param barrier Barrier semaphore used to block the current actor.
+ */
+static void	check_waiting_status(
+	mutex *lock,
+	int *waiting_count,
+	int required_count,
+	sem_t *barrier
+)
 {
-    pthread_mutex_lock(&lock_elves);
+	pthread_mutex_lock(lock);
 
-    if (g_elves_waiting >= REQUIRED_ELVES)
-    {
-        sem_post(&santa_sem);
-    }
+	if (*waiting_count >= required_count)
+		sem_post(&santa_sem);
 
-    pthread_mutex_unlock(&lock_elves);
-    
-    sem_wait(&elf_barrier);
-}
+	pthread_mutex_unlock(lock);
 
-void change_reindeer_waiting(int change)
-{
-    pthread_mutex_lock(&lock_reindeer);
-
-    g_reindeer_waiting += change;
-    
-    pthread_mutex_unlock(&lock_reindeer);
-}
-
-void check_reindeer_status()
-{
-    pthread_mutex_lock(&lock_reindeer);
-
-    if (g_reindeer_waiting >= REQUIRED_REINDEER)
-    {
-        sem_post(&santa_sem);
-    }
-
-    pthread_mutex_unlock(&lock_reindeer);
+	sem_wait(barrier);
 }
 
 // ================== PRINTING FUNCTIONS ==================
 
+/**
+ * @brief Prints a simulation action in a thread-safe way.
+ *
+ * @param data Pointer to the related actor data, or NULL for Santa-only actions.
+ * @param type Type of action to print.
+ */
 static void do_action(void *data, t_action_type type)
 {
     time_t current_time = time(NULL);
@@ -193,16 +212,29 @@ static void do_action(void *data, t_action_type type)
 // ==================== THREAD FUNCTIONS ====================
 
 
-static void* do_reindeer_work(void *arg)
+/**
+ * @brief Main routine executed by each reindeer thread.
+ *
+ * A reindeer waits for permission to join the group, increments the waiting
+ * reindeer counter, waits until Santa releases the reindeer barrier, prints
+ * its action, and then sleeps before repeating the cycle.
+ *
+ * @param arg Pointer to a t_reindeer structure.
+ * @return Always returns NULL.
+ */
+static void *do_reindeer_work(void *arg)
 {
     t_reindeer* reindeer = (t_reindeer *)arg;
 
     while (true)
     {
         sem_wait(&reindeer_sem);
-        change_reindeer_waiting(+1);
+        change_waiting_count(&lock_reindeer, &g_reindeer_waiting, +1);
 
-        check_reindeer_status();
+        check_waiting_status(
+            &lock_reindeer, &g_reindeer_waiting,
+            REQUIRED_REINDEER, &reindeer_barrier
+        );
 
         do_action(reindeer, ACTION_REINDEER);
 
@@ -213,16 +245,29 @@ static void* do_reindeer_work(void *arg)
     return (NULL);
 }
 
-static void* do_elves_work(void *arg)
+/**
+ * @brief Main routine executed by each elf thread.
+ *
+ * An elf waits for permission to join a group of elves, increments the waiting
+ * elf counter, waits until Santa releases the elf barrier, prints its action,
+ * and then sleeps before repeating the cycle.
+ *
+ * @param arg Pointer to a t_elf structure.
+ * @return Always returns NULL.
+ */
+static void *do_elves_work(void *arg)
 {
     t_elf* elf = (t_elf *)arg;
 
     while (true)
     {
         sem_wait(&elf_sem);
-        change_elves_waiting(+1);
+        change_waiting_count(&lock_elves, &g_elves_waiting, +1);
 
-        check_elves_status();
+        check_waiting_status(
+            &lock_elves, &g_elves_waiting,
+            REQUIRED_ELVES, &elf_barrier
+        );
 
         do_action(elf, ACTION_ELF);
 
@@ -233,9 +278,20 @@ static void* do_elves_work(void *arg)
     return (NULL);
 }
 
-static void* do_santa_work(void *arg)
+/**
+ * @brief Main routine executed by the Santa thread.
+ *
+ * Santa sleeps until notified by elves or reindeer. Reindeer have priority:
+ * if all reindeer are waiting, Santa prepares the sleigh and releases them.
+ * Otherwise, if enough elves are waiting, Santa helps the elf group and
+ * releases them.
+ *
+ * @param arg Unused argument.
+ * @return Always returns NULL.
+ */
+static void *do_santa_work(void *arg)
 {
-    (void)arg;
+    (void) arg;
 
     while (true)
     {
@@ -246,8 +302,9 @@ static void* do_santa_work(void *arg)
         {
             do_action(NULL, ACTION_SANTA_WITH_REINDEER);
             g_reindeer_waiting -= REQUIRED_REINDEER;
+            open_barrier(&reindeer_barrier, REQUIRED_REINDEER);
             pthread_mutex_unlock(&lock_reindeer);
-            spend_time(SANTA_SLEEP);
+            spend_time(SANTA_SLEEP); 
 
             continue;
         }
@@ -262,7 +319,6 @@ static void* do_santa_work(void *arg)
             open_barrier(&elf_barrier, REQUIRED_ELVES);
         }
         pthread_mutex_unlock(&lock_elves);
-        
         spend_time(SANTA_SLEEP);
     }
 
@@ -271,7 +327,16 @@ static void* do_santa_work(void *arg)
 
 // ==================== INITIALIZATION FUNCTIONS ====================
 
-static int init_sems()
+/**
+ * @brief Initializes all semaphores used by the simulation.
+ *
+ * This function initializes Santa, elf, reindeer, and barrier semaphores.
+ * If any initialization fails, previously initialized semaphores are destroyed
+ * before returning failure.
+ *
+ * @return SUCCESS on successful initialization, FAILURE otherwise.
+ */
+static int init_sems(void)
 {
     if (sem_init(&santa_sem, 0, 0) == FAILURE) 
     {
@@ -303,15 +368,40 @@ static int init_sems()
         return (FAILURE);
     }
 
-    return (SUCCESS); 
+    if (sem_init(&reindeer_barrier, 0, 0) == FAILURE) 
+    {
+        perror("reindeer_barrier failed");
+        sem_destroy(&elf_barrier);
+        sem_destroy(&reindeer_sem);
+        sem_destroy(&elf_sem);
+        sem_destroy(&santa_sem);
+        return (FAILURE);
+    }
 
+    return (SUCCESS);
 }
 
-static void init_milestone()
+/**
+ * @brief Initializes the simulation start timestamp.
+ *
+ * The global milestone is used as the reference point for calculating elapsed
+ * time in printed simulation messages.
+ */
+static void init_milestone(void)
 {
     g_milestone = time(NULL);
 }
 
+
+/**
+ * @brief Creates a thread based on the given action type.
+ *
+ * This function selects the correct thread routine according to the actor type
+ * and starts the corresponding pthread.
+ *
+ * @param type Actor type that determines which routine will be used.
+ * @param data Pointer to the actor structure.
+ */
 static void init_thread(t_action_type type, void *data)
 {
     pthread_t *thread;
@@ -347,6 +437,17 @@ static void init_thread(t_action_type type, void *data)
     }
 }
 
+/**
+ * @brief Initializes and starts the Santa Claus simulation.
+ *
+ * This function initializes semaphores and the simulation timestamp, assigns
+ * IDs to elves and reindeer, creates all actor threads, and waits for the
+ * Santa thread.
+ *
+ * @param elves Array of elf structures.
+ * @param reindeer Array of reindeer structures.
+ * @param santa Pointer to the Santa structure.
+ */
 void init_sim(t_elf *elves, t_reindeer *reindeer, t_santa *santa)
 {
     if (init_sems() == FAILURE) exit(EXIT_FAILURE);
