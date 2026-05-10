@@ -30,21 +30,43 @@ typedef pthread_mutex_t mutex;
 
 // ==========f========== GLOBAL VARIABLES ====================
 
+// Indicates whether an error occurred during the simulation.
 int g_error_flag = 0;
+
+// Stores the number of reindeer currently waiting for Santa.
 int g_reindeer_waiting = 0;
+
+// Stores the number of elves currently waiting for Santa's help.
 int g_elves_waiting = 0;
 
+// Stores the starting time of the simulation.
 time_t g_milestone = 0;
 
+// Prevents multiple threads from printing at the same time.
 mutex lock_print = PTHREAD_MUTEX_INITIALIZER;
+
+// Protects access to the shared elf counter.
 mutex lock_elves = PTHREAD_MUTEX_INITIALIZER;
+
+// Protects access to the global error flag.
 mutex lock_error = PTHREAD_MUTEX_INITIALIZER;
+
+// Protects access to the shared reindeer counter.
 mutex lock_reindeer = PTHREAD_MUTEX_INITIALIZER;
 
+// Used to wake Santa when elves or reindeer need him.
 sem_t santa_sem;
+
+// Limits the number of elves that can wait for Santa at the same time.
 sem_t elf_sem;
+
+// Controls reindeer participation in the synchronization cycle.
 sem_t reindeer_sem;
+
+// Blocks elves until Santa finishes helping their group.
 sem_t elf_barrier;
+
+// Blocks reindeer until Santa is ready to prepare the sleigh.
 sem_t reindeer_barrier;
 
 // ==================== ENUMS ====================
@@ -300,8 +322,8 @@ static void *do_santa_work(void *arg)
         pthread_mutex_lock(&lock_reindeer);
         if (g_reindeer_waiting >= REQUIRED_REINDEER)
         {
-            do_action(NULL, ACTION_SANTA_WITH_REINDEER);
             g_reindeer_waiting -= REQUIRED_REINDEER;
+            do_action(NULL, ACTION_SANTA_WITH_REINDEER);
             open_barrier(&reindeer_barrier, REQUIRED_REINDEER);
             pthread_mutex_unlock(&lock_reindeer);
             spend_time(SANTA_SLEEP); 
