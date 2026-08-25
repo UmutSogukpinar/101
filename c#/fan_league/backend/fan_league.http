@@ -1,6 +1,0 @@
-@fan_league_HostAddress = http://localhost:5160
-
-GET {{fan_league_HostAddress}}/weatherforecast/
-Accept: application/json
-
-###

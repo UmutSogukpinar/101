@@ -1,9 +1,0 @@
-**/bin
-**/obj
-.git
-.gitignore
-.idea
-.vscode
-Dockerfile*
-docker-compose*
-README.md
